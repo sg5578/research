@@ -1,0 +1,11 @@
+#include "IndoorGPS.h" 
+#include "updatePos.h"
+
+// Make the GPS object, giving it the max number of objects that 
+// are being tracked, and this computer's IP Address (when 
+// connected to the Discover lab WIFI) ExternalGPS GPS(max_object_no, ip); 
+//if(GPS.init() != 1){ printf("ExternalGPS error: fail to initialize\n"); exit(-1); }
+
+// Create the updatePos task. my_id is the trackable 
+// number attached to this robot. The task is added to the 
+// robot in the constructor. robot.lock(); updatePos update(&robot,&GPS,my_id); robot.unlock();
