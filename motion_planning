@@ -1,5 +1,8 @@
-#include "IndoorGPS.h" 
+#include "Aria.h"
+#include "ActPickUp.h"
+#include "IndoorGPS.h"
 #include "updatePos.h"
+
 
 // Make the GPS object, giving it the max number of objects that 
 // are being tracked, and this computer's IP Address (when 
