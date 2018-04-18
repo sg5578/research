@@ -12,3 +12,141 @@
 // Create the updatePos task. my_id is the trackable 
 // number attached to this robot. The task is added to the 
 // robot in the constructor. robot.lock(); updatePos update(&robot,&GPS,my_id); robot.unlock();
+
+
+int main(int argc, char** argv) {
+	// These will be used for the GPS and Update Pos tasks
+	int max_object_no = 5; // total # of objects tracked by GPS
+	const char* ip = "192.168.1.130"; // your comp's ip when connected to discover wifi
+	int my_id = 1; // which trackable is this computer attached to on OptiTrack
+
+	// Initialize Aria and declare some things that our robot will use.
+	Aria::init();
+	ArArgumentParser parser(&argc, argv);
+	parser.loadDefaultArguments();
+	ArRobot robot;
+	ArGripper gripper(&robot);
+	ArRobotConnector robotConnector(&parser, &robot);
+	ArLaserConnector laserConnector(&parser, &robot, &robotConnector);
+
+	// Connect to the robot
+	if (!robotConnector.connectRobot()) {
+		ArLog::log(ArLog::Terse,
+				"actionGroupExample: Could not connect to the robot.");
+		if (parser.checkHelpAndWarnUnparsed()) {
+			// -help not given
+			Aria::logOptions();
+			Aria::exit(1);
+		}
+	}
+	// Parse the command line arguments.
+	if (!Aria::parseArgs() || !parser.checkHelpAndWarnUnparsed()) {
+		Aria::logOptions();
+		Aria::exit(1);
+	}
+
+	// Connect to the lasers (hokuyo will be fast, SICK takes a minute to power on)
+	if (!laserConnector.connectLasers()) {
+		ArLog::log(ArLog::Terse,
+				"Could not connect to configured lasers. Exiting.");
+		Aria::exit(3);
+		return 3;
+	}
+
+	// Find the laser on the robot, and make assign it to 'laser'.
+	robot.lock();
+	std::map<int, ArLaser*> *lasers = robot.getLaserMap();
+	ArLog::log(ArLog::Normal, "ArRobot provided a set of %d ArLaser objects.",
+			lasers->size());
+	std::map<int, ArLaser*>::const_iterator i = lasers->begin();
+	ArLaser* laser = (*i).second;
+	robot.unlock();
+
+	// If the robot is consistently bumping the object or not getting close enough to it, change
+	// this parameter. The lidar on the front of the robot is about 125 mm from the center of rotation.
+	// However, the center of your robot is being updated as the center of the reflectors for the
+	// tracking system. It's important that the center of these reflectors is around the center of your robot.
+	laser->setSensorPosition(125, 0, 0, 0);
+
+	// Most of the time our laptops are open on the back of the robot, so ignore backwards readings from the
+	// lidar. If you have it so that your laptop can run the code while closed, delete these ignore readings.
+	// If using ActPickUp, you will need to delete these lines in PickUpDropOff::Initialize(void) as well.
+	laser->clearIgnoreReadings();
+	for (int i = -180; i <= -120; i++)
+		laser->addIgnoreReading(i);
+	for (int i = 120; i <= 180; i++)
+		laser->addIgnoreReading(i);
+
+	// Declare the GPS class and create the updatePos task
+	ExternalGPS GPS(max_object_no, ip);
+	if (GPS.init() != 1)
+	{
+		printf("ExternalGPS error: Failed to initialize.\n");
+		printf("ExternalGPS error: Make sure you are connected to the discover wifi. \n");
+		printf("ExternalGPS error: Use the command 'ifconfig' to get your ip and edit above. \n");
+		printf("ExternalGPS error: It will be under wlan0 inet addr: \n");
+		printf("ExternalGPS error: Exiting.");
+		Aria::exit(0);
+	}
+
+// Assigns the task to update the pos of your robot every 100 ms.
+robot.lock();
+updatePos update(&robot,&GPS,my_id);
+robot.unlock();
+
+// Let the laser and GPS get situated
+ArUtil::sleep(3000);
+
+robot.enableMotors();
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// This is the implementation of the actual PickUp action.
+
+// Declare the action groups
+ArActionGroup *Move;
+ArActionGroup *PickUp; // Pick Up action group
+ArActionGroup *DropOff; // Drop Off action group
+PickUp = new ArActionGroup(&robot);
+DropOff = new ArActionGroup(&robot);
+
+PickUpGrip grip(&robot,laser,&GPS,&gripper,PickUp);
+PickUpTurn turn(&robot,laser,&GPS);
+PickUpMoveForward move(&robot,laser,&GPS);
+PickUpDropOff drop(&robot, laser, &gripper,DropOff);
+
+// Add call back functors for grip and drop
+CallbackContainer cb; // Contains the callback function. Declared in ActPickUp.h
+ArFunctor2C<CallbackContainer, bool,ArActionGroup*> // This functor will return true/false for 'pick up' and
+CallBackFunctor(cb, &CallbackContainer::PickUpCB); // 'drop off', and disable the group
+
+grip.setCallback(&CallBackFunctor);
+drop.setCallback(&CallBackFunctor);
+
+// Add the actions to the groups. For Picking Up, the priorities need to be grip > turn > move
+PickUp->addAction(&grip,100);
+PickUp->addAction(&turn,90);
+PickUp->addAction(&move,80);
+DropOff->addAction(&drop,100); // separate action group for dropping things off
+
+// We have to initialize each of the actions with the object that
+// will be picked up before activating the group (object 2 in this example).
+//grip.Initialize(2);
+//turn.Initialize(2);
+//move.Initialize(2);
+
+//PickUp->activateExclusive();
+
+// when ready to drop off the object, and use this:
+// drop.Initialize();
+// DropOff->activateExclusive();
+
+// NOTE: Drop off will move backwards 700 mm after setting down object
+//       no matter what. So be careful. Future work should edit
+//       ArActionDesired *PickUpDropOff::fire(ArActionDesired currentDesired)
+//		 in ActPickUp.cpp.
+//		 Also, don't initialize 'grip' right before drop, because 'grip' will open the
+//       the gripper before lowering the lift.
+robot.run(true);
+
+Aria::exit(0);
+}
