@@ -112,6 +112,7 @@ DropOff = new ArActionGroup(&robot);
 PickUpGrip grip(&robot,laser,&GPS,&gripper,PickUp);
 PickUpTurn turn(&robot,laser,&GPS);
 PickUpMoveForward move(&robot,laser,&GPS);
+PickUpAvoid avoid(&robot, laser,&GPS);
 PickUpDropOff drop(&robot, laser, &gripper,DropOff);
 
 // Add call back functors for grip and drop
@@ -125,6 +126,7 @@ drop.setCallback(&CallBackFunctor);
 // Add the actions to the groups. For Picking Up, the priorities need to be grip > turn > move
 PickUp->addAction(&grip,100);
 PickUp->addAction(&turn,90);
+PickUp->addAction(&avoid,85);
 PickUp->addAction(&move,80);
 DropOff->addAction(&drop,100); // separate action group for dropping things off
 
@@ -132,6 +134,7 @@ DropOff->addAction(&drop,100); // separate action group for dropping things off
 // will be picked up before activating the group (object 2 in this example).
 //grip.Initialize(2);
 //turn.Initialize(2);
+//avoid.Initialize(2);
 //move.Initialize(2);
 
 //PickUp->activateExclusive();
